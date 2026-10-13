@@ -76,17 +76,26 @@ def add_chunks(
 
 def search_chunks(
     query: str,
-    top_k: int = 3
+    top_k: int = 3,
+    max_distance: float = 0.70
 ):
+
     """
-    Search ChromaDB and return the most relevant
-    document chunks with their metadata.
+    Search ChromaDB and return relevant document chunks.
+
+    Smaller distance values generally indicate closer matches.
+    Results above max_distance Are filtered out.
     """
 
-    # Create embedding for the user's question
-    query_embedding = create_embedding(query)
 
-    # Search ChromaDB
+    # Reject an empty question.
+    if not query or not query.strip():
+       return[]
+
+    # Create an embedding for the user's question.
+    query_embedding = create_embedding(query.strip())
+
+    # Search ChromaDB for the closest document chunks.
     results = collection.query(
         query_embeddings=[
             query_embedding.tolist()
@@ -96,21 +105,34 @@ def search_chunks(
 
     retrieved_chunks = []
 
-    documents = results["documents"][0]
-    metadatas = results["metadatas"][0]
-    distances = results["distances"][0]
+    # Safely get the first query's results.
+    documents = results.get("documents") or [[]]
+    metadatas = results.get("metadatas") or [[]]
+    distances = results.get("distances") or [[]]
 
+
+    documents = documents[0] if documents else []
+    metadatas = metadatas[0] if metadatas else []
+    distances = distances[0] if distances else []
+
+    # Combine each documents with its metadata and distance.
     for document, metadata, distance in zip(
         documents,
         metadatas,
         distances
     ):
+        # Skip matches that are too distant.
+        if distance > max_distance:
+            continue
+
+        # Handle missing metada safely.
+        metadata = metadata or {}
 
         retrieved_chunks.append({
             "text": document,
-            "source": metadata["source"],
-            "page": metadata["page"],
-            "chunk_index": metadata["chunk_index"],
+            "source": metadata.get("source", "Unkown source"),
+            "page": metadata.get("page"),
+            "chunk_index": metadata.get("chunk_index"),
             "distance": distance
         })
 
